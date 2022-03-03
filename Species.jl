@@ -2,15 +2,16 @@ abstract type Species end
 
 mutable struct Gene <: Species
     name::String
+    idx::Int64
     u₀::Float64
-    u::Float64
     gene_proteins::Vector{Species}
 
-    function Gene(name) 
-        u::Float64 = rand()
-        new(name, u, u, [])
-    end
+    num_params::Int64
+    param_idx::Vector{Int64}
+
+    Gene(name, idx::Int64) = new(name, idx, 0.05, [], 0, [])
 end
+
 
 function d_dt(gene::Gene)::Float64
     (
@@ -19,27 +20,30 @@ function d_dt(gene::Gene)::Float64
     )
 end
 
-function θ!(gene::Gene, vals::Vector{Float64})
-    gene.u₀ = vals[1]
+function params!(gene::Gene, θ)
+    # gene.u₀ = θ[1]
 end
 
-function θ(gene::Gene)::Vector{Float64}
-    [gene.u₀]
+function params(gene::Gene)::Vector{Float64}
+    []
 end
 
 
 mutable struct mRNA <: Species
     name::String
+    idx::Int64
     u₀::Float64
-    u::Float64
     transcriptor::Species
-
+    
     # params
     transcription_rate::Float64
     degradation_rate::Float64
+    num_params::Int64
+    param_idx::Vector{Int64}
 
-    mRNA(name, transcriptor::Species) =
-        new(name, 0.0, 0.0, transcriptor, rand(), rand())
+
+    mRNA(name, idx::Int64, transcriptor::Species) =
+        new(name, idx, 0.0, transcriptor, rand()*0.01, rand()*0.01, 2, [])
 
 end
 
@@ -51,27 +55,29 @@ function d_dt(mrna::mRNA)
     )
 end
 
-function θ!(m::mRNA, vals::Vector{Float64})
-    m.transcription_rate = vals[1]
-    m.degradation_rate = vals[2]
+function params!(m::mRNA, θ)
+    m.transcription_rate = θ[1]
+    m.degradation_rate = θ[2]
 end
 
-function θ(m::mRNA)::Vector{Float64}
+function params(m::mRNA)::Vector{Float64}
     [m.transcription_rate, m.degradation_rate]
 end
 
 mutable struct Protein <: Species
     name::String
+    idx::Int64
     u₀::Float64
-    u::Float64
     targets::Vector{Species}
     translator::mRNA
     
     # params
     translation_rate::Float64
+    num_params::Int64
+    param_idx::Vector{Int64}
 
-    Protein(name, translator::mRNA) =
-        new(name, 0.0, 0.0, [], translator, rand())
+    Protein(name::String, idx::Int64, translator::mRNA) =
+        new(name, idx, 0.0, [], translator, rand()*0.01, 1, [])
 end
 
 function d_dt(protein::Protein)
@@ -82,27 +88,30 @@ function d_dt(protein::Protein)
     )
 end
 
-function θ!(p::Protein, vals::Vector{Float64})
-    p.translation_rate = vals[1]
+function params!(p::Protein, θ)
+    p.translation_rate = θ[1]
 end
 
-function θ(p::Protein)::Vector{Float64}
+function params(p::Protein)::Vector{Float64}
     [p.translation_rate]
 end
 
 mutable struct GeneProtein <: Species
     name::String
+    idx::Int64
     u₀::Float64
-    u::Float64
     gene::Gene
     protein::Protein
 
     # params
     binding_rate::Float64
     release_rate::Float64
+    num_params::Int64
+    param_idx::Vector{Int64}
+    
 
-    function GeneProtein(name, gene::Gene, protein::Protein)
-        gp = new(name, 0.0, 0.0, gene, protein, rand(), rand())
+    function GeneProtein(name, idx::Int64, gene::Gene, protein::Protein)
+        gp = new(name, idx, 0.0, gene, protein, rand()*0.01, rand()*0.01, 2, [])
         push!(protein.targets, gp)
         push!(gene.gene_proteins, gp)
         gp
@@ -116,28 +125,31 @@ function d_dt(gp::GeneProtein)
     )
 end
 
-function θ!(gp::GeneProtein, vals::Vector{Float64})
-    gp.binding_rate = vals[1]
-    gp.release_rate = vals[2]
+function params!(gp::GeneProtein, θ)
+    gp.binding_rate = θ[1]
+    gp.release_rate = θ[2]
 end
 
-function θ(gp::GeneProtein)::Vector{Float64}
+function params(gp::GeneProtein)::Vector{Float64}
     [gp.binding_rate, gp.release_rate]
 end
 
 mutable struct ProteinComplex <: Species
     name::String
+    idx::Int64
     u₀::Float64
-    u::Float64
     protein1::Protein
     protein2::Protein
 
     # params
     binding_rate::Float64
     release_rate::Float64
+    num_params::Int64
+    param_idx::Vector{Int64}
 
-    function ProteinComplex(name, protein1::Protein, protein2::Protein)
-        new(name, 0.0, 0.0, protein1, protein2, rand(), rand())
+
+    function ProteinComplex(name, idx::Int64, protein1::Protein, protein2::Protein)
+        new(name, idx, 0.0, protein1, protein2, rand()*0.01, rand()*0.01, 2, [])
     end
 end
 
@@ -148,12 +160,12 @@ function d_dt(c::ProteinComplex)
     )
 end
 
-function θ!(c::ProteinComplex, vals::Vector{Float64})
-    c.binding_rate = vals[1]
-    c.release_rate = vals[2]
+function params!(c::ProteinComplex, θ)
+    c.binding_rate = θ[1]
+    c.release_rate = θ[2]
 end
 
-function θ(c::ProteinComplex)::Vector{Float64}
+function params(c::ProteinComplex)::Vector{Float64}
     [c.binding_rate, c.release_rate]
 end
 

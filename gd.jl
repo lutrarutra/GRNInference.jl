@@ -1,6 +1,5 @@
 using Revise, DifferentialEquations, Plots, Distributions
-using Optim, DiffEqSensitivity, Calculus, ForwardDiff, Tracker
-using BenchmarkTools, LinearAlgebra
+using Optim, DiffEqSensitivity, Calculus, ForwardDiff, Tracker, BenchmarkTools, LinearAlgebra
 
 M(x) = mapreduce(permutedims, vcat, x)
 
@@ -35,17 +34,8 @@ function d_dt!(du, u, p, t)
     nothing
 end
 
-
-function test_f(p)
-    prob = ODEProblem(d_dt!, u0, extrema(t_data), p)
-    solve(prob)[end]
-end
-
 u0 = [2.5, 1.0]
 p = [1.0, 1.2]
-
-
-ts = 1:0.5:10
 
 function target_function(params::Vector{Float64})
 
@@ -96,8 +86,6 @@ function target_grad(k)
     g
 end
 
-
-
 function GD(k0, n_iter, r)
     path = zeros(Float64, (n_iter+1, length(k0)))
     path[1,:] = k0
@@ -115,21 +103,37 @@ end
 
 @btime GD([2.0, 1.5], 50, 0.001)
 
-prob  = ODEForwardSensitivityProblem(d_dt!, u0, extrema(t_ext), p)
+prob  = ODEForwardSensitivityProblem(d_dt!, u0, (0.0, maximum(t_data)), p)
 
 function G(p)
-    t_ext = vcat(0.0, t_data)
+    N::Int64 = 2
     _prob = remake(prob, u0=convert.(eltype(p),prob.u0), p=p)
-    sol = solve(_prob, saveat=t_ext)
+    sol = solve(_prob, saveat=t_data)
     x, dp = extract_local_sensitivities(sol)
 
-    dp1 = dp[1][:,2:end]
-    dp2 = dp[2][:,2:end]
-    d = y_data' - x[:,2:end]
+    GD = zeros(Float64, N)
+    d = y_data' - x
 
-    [-dot(dp1, d)*2, -dot(dp2, d)*2]
+    for i in 1:N
+        GD[i] = -2.0*dot(dp[i], d)
+    end
+    # dp1 = dp[1][:,2:end]
+    # dp2 = dp[2][:,2:end]
+    # [-dot(dp1, d)*2, -dot(dp2, d)*2]
+    GD
 end
+
+t_data
+
+
+_prob = remake(prob, u0=convert.(eltype(p),prob.u0), p=p)
+sol = solve(_prob, saveat=t_data)
+x, dp = extract_local_sensitivities(sol)
+x
+GD = zeros(Float64, N)
+d = y_data' - x
 
 
 @btime G(p)
 
+@btime G(p)
