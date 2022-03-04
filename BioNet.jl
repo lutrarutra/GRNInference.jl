@@ -27,10 +27,8 @@ function add_species!(net::BioNetwork, ttt::DataType, name::String; kwargs...)
         push!(net.species, mRNA(name, length(net.species)+1, kwargs[:transcriptor]))
     elseif ttt <: Protein
         push!(net.species, Protein(name, length(net.species)+1, kwargs[:translator]))
-    elseif ttt <: GeneProtein
-        push!(net.species, GeneProtein(name, length(net.species)+1, kwargs[:gene], kwargs[:protein]))
-    elseif ttt <: ProteinComplex
-        push!(net.species, ProteinComplex(name, length(net.species)+1, kwargs[:protein1], kwargs[:protein2]))
+    elseif ttt <: Complex
+        push!(net.species, Complex(name, length(net.species)+1, kwargs[:species1], kwargs[:species2]))
     end
 
     append!(net.species[end].param_idx, collect(net.num_params+1:net.num_params+net.species[end].num_params))
@@ -43,7 +41,6 @@ function init!(net::BioNetwork, obs::Observations)
     for (i, k) in enumerate(net.ix)
         net.species[k].u₀ = net.obs.u[1,i]
     end
-    
     nothing
 end
 
@@ -69,79 +66,16 @@ function labels(net::BioNetwork)::Matrix{String}
     reshape(ls, 1, length(ls))
 end
 
-# function make_ode(net::BioNetwork)
-#     ODEForwardSensitivityProblem(f!, state₀(net), (0.0, maximum(obs.t)), params(net))
+# function d_dt!(net::BioNetwork, du::Vector{Float64}, u::Vector{Float64}, p::Vector{Float64})
+#     d_dt!.(net.species, du, u, p)
+#     nothing
 # end
 
-# function system!(du, u, p, t, net::BioNetwork)
-#     # du = zeros(Float64, length(network.species))
-#     update!(net, state(net), p)
-#     return d_dt!(net, du)
+# function solve_ode(net::BioNetwork, θ; solver)
+#     f!(du,u,p,t) = d_dt!(du,u,p,t,net)
+#     prob = ODEProblem(f!, state₀(net), (0.0, maximum(net.obs.t)), θ)
+#     solve(prob, solver)
 # end
-
-# function update!(net::BioNetwork, u, θ)
-#     params!(net, θ)
-#     for (i,s) in enumerate(net.species)
-#         s.u = u[i]
-#     end
-# end
-
-
-function d_dt!(du, u, p, t, net::BioNetwork)
-    for (i,s) in enumerate(net.species)
-        du[i] = 0.0
-        if s isa Gene
-            for gp in s.gene_proteins
-                du[i] -= u[s.idx] * u[gp.protein.idx] * p[gp.param_idx][1]  # binding_rate
-                du[i] += u[gp.idx] * p[gp.param_idx][2]                     # release_rate
-            end
-        elseif s isa mRNA
-            du[i] = (
-                u[s.transcriptor.idx] * p[s.param_idx][1]   # transcription_rate
-                - u[s.idx] * p[s.param_idx][2]              # degradation_rate
-            )
-        elseif s isa Protein
-            du[i] = u[s.translator.idx] * p[s.param_idx][1]
-            for target in s.targets
-                du[i] -= u[s.idx] * u[target.idx] * p[target.param_idx][1]  # binding_rate
-                du[i] += u[target.idx] * p[target.param_idx][2]             # release_rate
-            end
-        elseif s isa GeneProtein
-            du[i] = (
-                u[s.protein.idx] * u[s.gene.idx] * p[s.param_idx][1]    # binding_rate
-                - u[s.idx] * p[s.param_idx][2]                          # release_rate
-            )
-        elseif s isa ProteinComplex
-            du[i] = (
-                u[s.protein1.idx] * u[s.protein2.idx] * p[s.param_idx][1]   # binding_rate
-                - u[s.idx] * p[s.param_idx][2]                              # release_rate          
-            )
-        end
-    end
-end
-
-# function d_dt!(net::BioNetwork, du)
-#     du .= d_dt.(net.species)
-# end
-
-function params(net::BioNetwork)::Vector{Float64}
-    collect(Iterators.flatten(params.(net.species)))
-end
-
-function params!(net::BioNetwork, θ)
-    c = 1
-    for (i,s) in enumerate(net.species)
-        n = length(params(s))
-        params!(s, θ[c:c+n-1])
-        c+=n
-    end
-end
-
-function solve_ode(net::BioNetwork, θ; solver)
-    f!(du,u,p,t) = d_dt!(du,u,p,t,net)
-    prob = ODEProblem(f!, state₀(net), (0.0, maximum(net.obs.t)), θ)
-    solve(prob, solver)
-end
 
 
 function loss(net::BioNetwork, θ; solver)::Float64
@@ -159,7 +93,7 @@ function loss(net::BioNetwork, θ; solver)::Float64
     sum(L)
 end
 
-function state₀(net::BioNetwork)
+function state₀(net::BioNetwork)::Vector{Float64}
     u = zeros(Float64, length(net.species))
     for i in 1:length(net.species)
         u[i] = net.species[i].u₀
@@ -168,14 +102,14 @@ function state₀(net::BioNetwork)
 end
 
 
-function ∂u(net::BioNetwork, θ; solver)
+function ∂u(net::BioNetwork, θ::Vector{Float64})::Vector{Float64}
     N::Int64 = length(θ)
     M::Int64 = size(net.obs.u)[2]
 
     # _prob = remake(net.ode_prob, u0=net.ode_prob.u0, p=θ)
-    f!(du,u,p,t) = d_dt!(du,u,p,t,net)
-    _prob = ODEForwardSensitivityProblem(f!, copy(state₀(net)), (0.0, maximum(obs.t)), θ)
-    sol = solve(_prob, solver, saveat=net.obs.t[2:end])
+    f!(du::Vector{Float64}, u::Vector{Float64}, p::Vector{Float64}, t) = d_dt!(net, du, u, p)
+    _prob = ODEForwardSensitivityProblem(f!, KenCarp4(), copy(state₀(net)), (0.0, maximum(obs.t)), θ)
+    sol = solve(_prob, saveat=net.obs.t[2:end])
     x, dp = extract_local_sensitivities(sol)
     
     d = zeros(Float64, (M, length(net.obs.t)-1))
@@ -189,9 +123,7 @@ function ∂u(net::BioNetwork, θ; solver)
     for i in 1:N
         GD[i] = -2.0*dot(dp[i][net.ix,:], d)
     end
-    # dp1 = dp[1][:,2:end]
-    # dp2 = dp[2][:,2:end]
-    # [-dot(dp1, d)*2, -dot(dp2, d)*2]
+
     GD
 end
 
@@ -210,4 +142,67 @@ function GD(net::BioNetwork; learning_rate=0.001, max_iter=1000)
     end
     path
 end
+
+function d_dt!(du::Vector{Float64}, u::Vector{Float64}, p::Vector{Float64}, net::BioNetwork)
+    for (i,s) in enumerate(net.species)
+        du[i] = 0.0
+        if s isa Gene
+            du[i] = (
+                - u[i] * dot(u[idx.(s.targets)], p[idx.(s.targets)]) * 
+                + 
+            )
+            for gp in s.gene_proteins
+                du[i] -= u[s.idx] * u[gp.protein.idx] * p[gp.param_idx][1]  # binding_rate
+                du[i] += u[gp.idx] * p[gp.param_idx][2]                     # release_rate
+            end
+        elseif s isa mRNA
+            du[i] = (
+                u[s.transcriptor.idx] * p[s.param_idx][1]   # transcription_rate
+                - u[s.idx] * p[s.param_idx][2]              # degradation_rate
+            )
+        elseif s isa Protein
+            du[i] = u[s.translator.idx] * p[s.param_idx][1]
+            for target in s.targets
+                du[i] -= u[s.idx] * u[target.idx] * p[target.param_idx][1]  # binding_rate
+                du[i] += u[target.idx] * p[target.param_idx][2]             # release_rate
+            end
+        elseif s isa Complex
+            du[i] = (
+                u[s.protein1.idx] * u[s.protein2.idx] * p[s.param_idx][1]   # binding_rate
+                - u[s.idx] * p[s.param_idx][2]                              # release_rate          
+            )
+        end
+    end
+    nothing
+end
+
+
+# function d_dt!(du::Vector{Float64}, u::Vector{Float64}, p::Vector{Float64}, t, net::BioNetwork)
+#     for (i,s) in enumerate(net.species)
+#         du[i] = 0.0
+#         if s isa Gene
+#             for gp in s.gene_proteins
+#                 du[i] -= u[s.idx] * u[gp.protein.idx] * p[gp.param_idx][1]  # binding_rate
+#                 du[i] += u[gp.idx] * p[gp.param_idx][2]                     # release_rate
+#             end
+#         elseif s isa mRNA
+#             du[i] = (
+#                 u[s.transcriptor.idx] * p[s.param_idx][1]   # transcription_rate
+#                 - u[s.idx] * p[s.param_idx][2]              # degradation_rate
+#             )
+#         elseif s isa Protein
+#             du[i] = u[s.translator.idx] * p[s.param_idx][1]
+#             for target in s.targets
+#                 du[i] -= u[s.idx] * u[target.idx] * p[target.param_idx][1]  # binding_rate
+#                 du[i] += u[target.idx] * p[target.param_idx][2]             # release_rate
+#             end
+#         elseif s isa Complex
+#             du[i] = (
+#                 u[s.protein1.idx] * u[s.protein2.idx] * p[s.param_idx][1]   # binding_rate
+#                 - u[s.idx] * p[s.param_idx][2]                              # release_rate          
+#             )
+#         end
+#     end
+#     nothing
+# end
 

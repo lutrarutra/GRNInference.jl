@@ -21,13 +21,13 @@ function true_network()
     add_species!(net, Protein, "Gal80", translator=net["mGal80"])
     add_species!(net, Protein, "Ash1", translator=net["mAsh1"])
 
-    add_species!(net, GeneProtein, "gp(gGal80-Swi5)",  gene=net["gGal80"], protein=net["Swi5"]),
-    add_species!(net, GeneProtein, "gp(gASh1-Swi5)",   gene=net["gASh1"], protein=net["Swi5"]),
-    add_species!(net, GeneProtein, "gp(gCbf1-Swi5)",   gene=net["gCbf1"], protein=net["Swi5"]),
-    add_species!(net, GeneProtein, "gp(gCbf1-Ash1)",   gene=net["gCbf1"], protein=net["Ash1"]),
-    add_species!(net, GeneProtein, "gp(gGal4-Cbf1)",   gene=net["gGal4"], protein=net["Cbf1"]),
-    add_species!(net, GeneProtein, "gp(gSwi5-Gal4)",   gene=net["gSwi5"], protein=net["Gal4"]),
-    add_species!(net, ProteinComplex, "c(Gal80-Gal4)", protein1=net["Gal80"], protein2=net["Gal4"])
+    add_species!(net, Complex, "gp(gGal80-Swi5)",   species1=net["gGal80"], species2=net["Swi5"]),
+    add_species!(net, Complex, "gp(gASh1-Swi5)",    species1=net["gASh1"],  species2=net["Swi5"]),
+    add_species!(net, Complex, "gp(gCbf1-Swi5)",    species1=net["gCbf1"],  species2=net["Swi5"]),
+    add_species!(net, Complex, "gp(gCbf1-Ash1)",    species1=net["gCbf1"],  species2=net["Ash1"]),
+    add_species!(net, Complex, "gp(gGal4-Cbf1)",    species1=net["gGal4"],  species2=net["Cbf1"]),
+    add_species!(net, Complex, "gp(gSwi5-Gal4)",    species1=net["gSwi5"],  species2=net["Gal4"]),
+    add_species!(net, Complex, "c(Gal80-Gal4)",     species1=net["Gal80"],  species2=net["Gal4"])
 
     return net
     # species::Vector{Species} = []
